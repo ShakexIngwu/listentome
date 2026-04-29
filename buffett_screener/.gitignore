@@ -1,0 +1,18 @@
+# Secrets — never commit
+.env
+
+# Docker
+*.tar
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Generated outputs
+analytics/
+output/
+backups/
+logs/

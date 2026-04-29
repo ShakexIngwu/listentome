@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ ticker }} — Investment Pitch Deck</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #0a0e1a;
+    color: #e8eaf0;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  /* ── Page breaks ──────────────────────────────────────────────────────────── */
+  .slide { page-break-after: always; padding: 40px 48px; min-height: 100vh; display: flex; flex-direction: column; }
+  .slide:last-child { page-break-after: avoid; }
+
+  /* ── Typography ───────────────────────────────────────────────────────────── */
+  h1 { font-size: 2.4em; font-weight: 900; letter-spacing: -1px; }
+  h2 { font-size: 1.4em; font-weight: 700; margin-bottom: 16px; color: #90caf9; }
+  h3 { font-size: 1.1em; font-weight: 600; margin-bottom: 8px; }
+  p  { margin-bottom: 10px; color: #cfd8e3; }
+
+  /* ── Slide 1: Cover ───────────────────────────────────────────────────────── */
+  .slide-cover {
+    background: linear-gradient(135deg, #0d1b2a 0%, #1a237e 60%, #0a0e1a 100%);
+    justify-content: center;
+    align-items: flex-start;
+    gap: 24px;
+  }
+  .cover-ticker { font-size: 5em; font-weight: 900; color: #fff; letter-spacing: -2px; }
+  .cover-name   { font-size: 1.6em; color: #90caf9; margin-top: -8px; }
+  .cover-sector { font-size: 1em; color: #546e7a; margin-top: 4px; }
+  .cover-date   { font-size: 0.9em; color: #546e7a; margin-top: 32px; }
+
+  .score-badge {
+    display: inline-block;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-size: 1.1em;
+    font-weight: 700;
+    color: #fff;
+    background: {{ recommendation_color }};
+    margin-top: 24px;
+  }
+  .score-number { font-size: 3em; font-weight: 900; color: {{ recommendation_color }}; display: block; line-height: 1; }
+
+  /* ── Cards ────────────────────────────────────────────────────────────────── */
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+
+  /* ── Metrics grid ─────────────────────────────────────────────────────────── */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .metric-cell {
+    background: rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+  }
+  .metric-label { font-size: 0.75em; color: #78909c; text-transform: uppercase; letter-spacing: 0.5px; }
+  .metric-value { font-size: 1.5em; font-weight: 700; color: #e3f2fd; margin-top: 4px; }
+
+  /* ── Score bars ───────────────────────────────────────────────────────────── */
+  .score-bar-row { margin-bottom: 10px; }
+  .score-bar-label { display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 4px; }
+  .score-bar-track { height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
+  .score-bar-fill  { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #1565c0, #42a5f5); }
+
+  /* ── EPS chart (text-based) ───────────────────────────────────────────────── */
+  .eps-row { display: flex; align-items: flex-end; gap: 6px; margin-top: 12px; }
+  .eps-bar-wrap { display: flex; flex-direction: column; align-items: center; flex: 1; }
+  .eps-bar { width: 100%; background: #1565c0; border-radius: 4px 4px 0 0; }
+  .eps-year { font-size: 0.65em; color: #546e7a; margin-top: 4px; }
+  .eps-val  { font-size: 0.65em; color: #90caf9; }
+
+  /* ── Risk list ────────────────────────────────────────────────────────────── */
+  .risk-item { display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-start; }
+  .risk-icon { color: #ef5350; font-size: 1.2em; flex-shrink: 0; }
+
+  /* ── Valuation comparison ─────────────────────────────────────────────────── */
+  .val-bar-row { margin-bottom: 14px; }
+  .val-label { font-size: 0.85em; color: #90caf9; margin-bottom: 4px; }
+  .val-track { height: 20px; background: rgba(255,255,255,0.08); border-radius: 6px; overflow: hidden; position: relative; }
+  .val-fill  { height: 100%; border-radius: 6px; display: flex; align-items: center; padding-left: 8px; font-size: 0.8em; font-weight: 600; }
+  .val-price { background: linear-gradient(90deg, #ef5350, #e57373); }
+  .val-iv    { background: linear-gradient(90deg, #00c853, #69f0ae); }
+
+  /* ── Disclaimer ───────────────────────────────────────────────────────────── */
+  .disclaimer { font-size: 0.7em; color: #37474f; margin-top: auto; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px; }
+</style>
+</head>
+<body>
+
+<!-- ── Slide 1: Cover ─────────────────────────────────────────────────────── -->
+<div class="slide slide-cover">
+  <div class="cover-ticker">{{ ticker }}</div>
+  <div class="cover-name">{{ company_name }}</div>
+  <div class="cover-sector">{{ sector }}</div>
+  <div style="margin-top: 32px;">
+    <span class="score-number">{{ "%.0f"|format(score.buffett_total_score) }}</span>
+    <span style="color:#546e7a; font-size:0.85em;">/ 100 Buffett Score</span>
+  </div>
+  <div class="score-badge">{{ score.recommendation.replace("_", " ") }}</div>
+  <div class="cover-date">Analysis Date: {{ date }} · Warren Buffett Strategy Screener</div>
+</div>
+
+<!-- ── Slide 2: Investment Thesis ─────────────────────────────────────────── -->
+<div class="slide">
+  <h2>Investment Thesis</h2>
+  <div class="card">
+    {% for para in (llm.investment_thesis or "No analysis available.").split("\n\n") %}
+      <p>{{ para }}</p>
+    {% endfor %}
+  </div>
+  <div class="card" style="margin-top: 8px;">
+    <h3>Economic Moat</h3>
+    <p><strong style="color:#90caf9;">Type:</strong> {{ (llm.moat_type or "unknown")|title|replace("_", " ") }} &nbsp;·&nbsp;
+       <strong style="color:#90caf9;">Strength:</strong> {{ llm.moat_strength or "N/A" }}/10</p>
+    <p>{{ llm.moat_summary or "" }}</p>
+  </div>
+</div>
+
+<!-- ── Slide 3: Financial Snapshot ───────────────────────────────────────── -->
+<div class="slide">
+  <h2>Financial Snapshot</h2>
+  <div class="metrics-grid">
+    <div class="metric-cell">
+      <div class="metric-label">EPS TTM</div>
+      <div class="metric-value">${{ "%.2f"|format(snap.eps_ttm or 0) }}</div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">Return on Equity</div>
+      <div class="metric-value">{{ "%.1f"|format((snap.return_on_equity or 0) * 100) }}%</div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">Gross Margin</div>
+      <div class="metric-value">{{ "%.1f"|format((snap.gross_margin or 0) * 100) }}%</div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">Debt / Equity</div>
+      <div class="metric-value">{{ "%.2f"|format(snap.debt_to_equity or 0) }}</div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">Net Margin</div>
+      <div class="metric-value">{{ "%.1f"|format((snap.net_margin or 0) * 100) }}%</div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">P/E Ratio</div>
+      <div class="metric-value">{{ "%.1f"|format(snap.pe_ratio or 0) }}x</div>
+    </div>
+  </div>
+
+  {% if eps_history %}
+  <h3 style="margin-top: 20px; margin-bottom: 8px;">EPS History</h3>
+  {% set max_eps = eps_history | map(attribute=1) | max %}
+  <div class="eps-row">
+    {% for year, eps in eps_history %}
+    <div class="eps-bar-wrap">
+      <div class="eps-val">${{ "%.2f"|format(eps) }}</div>
+      <div class="eps-bar" style="height: {{ [((eps / max_eps) * 80)|int, 4]|max }}px;
+           background: {% if eps < 0 %}#ef5350{% else %}#1565c0{% endif %};"></div>
+      <div class="eps-year">{{ year }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Slide 4: Valuation ─────────────────────────────────────────────────── -->
+<div class="slide">
+  <h2>Valuation — Margin of Safety</h2>
+  {% if dcf %}
+  {% set max_val = [dcf.current_price, dcf.intrinsic_value_per_share]|max %}
+  <div class="card">
+    <div class="val-bar-row">
+      <div class="val-label">Current Price</div>
+      <div class="val-track">
+        <div class="val-fill val-price" style="width: {{ ((dcf.current_price / max_val) * 100)|int }}%;">
+          ${{ "%.2f"|format(dcf.current_price) }}
+        </div>
+      </div>
+    </div>
+    <div class="val-bar-row">
+      <div class="val-label">Intrinsic Value (DCF)</div>
+      <div class="val-track">
+        <div class="val-fill val-iv" style="width: {{ ((dcf.intrinsic_value_per_share / max_val) * 100)|int }}%;">
+          ${{ "%.2f"|format(dcf.intrinsic_value_per_share) }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-size: 2em; font-weight: 900; color: {{ recommendation_color }};">
+      {{ "%.1f"|format(dcf.margin_of_safety * 100) }}% Margin of Safety
+    </div>
+    <p style="margin-top: 8px; color: #78909c;">
+      DCF Assumptions · Growth: {{ "%.1f"|format(dcf.growth_rate * 100) }}% ·
+      Discount: {{ "%.1f"|format(dcf.discount_rate * 100) }}% ·
+      Terminal Multiple: {{ dcf.terminal_multiple }}×
+    </p>
+  </div>
+  {% else %}
+  <div class="card"><p>Insufficient data for DCF valuation.</p></div>
+  {% endif %}
+</div>
+
+<!-- ── Slide 5: Buffett Score Breakdown ──────────────────────────────────── -->
+<div class="slide">
+  <h2>Buffett Score Breakdown</h2>
+  <div class="card">
+    {% set dims = [
+      ("EPS Consistency",   score.eps_consistency_score,   "20%"),
+      ("Return on Equity",  score.roe_score,                "20%"),
+      ("Margin of Safety",  score.margin_of_safety_score,  "20%"),
+      ("Low Leverage",      score.leverage_score,           "15%"),
+      ("FCF Yield",         score.fcf_yield_score,          "15%"),
+      ("Economic Moat",     score.moat_score,               "5%"),
+      ("LLM Quality",       score.llm_quality_score,        "5%"),
+    ] %}
+    {% for label, val, weight in dims %}
+    <div class="score-bar-row">
+      <div class="score-bar-label">
+        <span>{{ label }} <span style="color:#546e7a;">({{ weight }})</span></span>
+        <span style="color:#90caf9; font-weight:600;">{{ "%.0f"|format(val) }}/100</span>
+      </div>
+      <div class="score-bar-track">
+        <div class="score-bar-fill" style="width: {{ val|int }}%;"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div style="text-align:center; margin-top: 20px;">
+    <span class="score-number">{{ "%.0f"|format(score.buffett_total_score) }}</span>
+    <div class="score-badge" style="margin-top: 8px;">{{ score.recommendation.replace("_", " ") }}</div>
+  </div>
+</div>
+
+<!-- ── Slide 6: Risk Factors ─────────────────────────────────────────────── -->
+<div class="slide">
+  <h2>Risk Factors</h2>
+  <div class="card">
+    {% for risk in (llm.competitive_risks or []) %}
+    <div class="risk-item">
+      <span class="risk-icon">⚠</span>
+      <p style="margin:0;">{{ risk }}</p>
+    </div>
+    {% else %}
+    <p>No specific risks identified.</p>
+    {% endfor %}
+  </div>
+  <div class="card" style="margin-top: 8px;">
+    <h3>News Sentiment</h3>
+    <p style="color: {% if llm.news_sentiment == 'positive' %}#00c853{% elif llm.news_sentiment == 'negative' %}#ef5350{% else %}#ffd600{% endif %}; font-size: 1.2em; font-weight: 700;">
+      {{ (llm.news_sentiment or "neutral")|title }}
+    </p>
+    <p>Management Quality: {{ llm.management_quality or "N/A" }}/10 — {{ llm.management_notes or "" }}</p>
+  </div>
+</div>
+
+<!-- ── Slide 7: Disclaimer ───────────────────────────────────────────────── -->
+<div class="slide">
+  <h2>Data Sources & Disclaimer</h2>
+  <div class="card">
+    <h3>Data Sources</h3>
+    <p>· Market data: Yahoo Finance (yfinance) — unofficial scraper</p>
+    <p>· Financial filings: SEC EDGAR (edgartools) — official XBRL data</p>
+    <p>· Company universe: NASDAQ Screener API</p>
+    <p>· Qualitative analysis: AI language model (Claude / Llama)</p>
+  </div>
+  <div class="disclaimer">
+    This report is generated automatically by the Warren Buffett Stock Screener system and is for
+    <strong>informational and educational purposes only</strong>. It does not constitute financial advice,
+    investment recommendations, or a solicitation to buy or sell any security. All DCF valuations are
+    estimates based on historical data and algorithmic models; actual future performance may differ
+    materially. AI-generated qualitative assessments may contain inaccuracies. Always perform your own
+    due diligence and consult a licensed financial advisor before making investment decisions.
+  </div>
+</div>
+
+<!-- ── Slide 8: Fact References ───────────────────────────────────────────────── -->
+<div class="slide">
+  <h2>LLM Analysis Fact References</h2>
+  <div class="card">
+    <p>The following facts were verified using Google Search grounding during the qualitative analysis phase:</p>
+    <ul style="margin-left: 20px; margin-top: 10px;">
+    {% for ref in (llm.fact_references or []) %}
+      <li style="margin-bottom: 8px;">{{ ref }}</li>
+    {% else %}
+      <li>No specific references recorded.</li>
+    {% endfor %}
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,41 @@
+# ── Core ──────────────────────────────────────────────────────────────────────
+httpx>=0.27,<1
+tenacity>=8,<10
+structlog>=24,<26
+pydantic-settings>=2,<3
+
+# ── Data sources ──────────────────────────────────────────────────────────────
+yfinance>=0.2.60
+edgartools>=2.0.0          # PyPI versions start at 1.0; 0.21.* never existed
+
+# ── PostgreSQL (operational store) ────────────────────────────────────────────
+asyncpg>=0.29,<1
+sqlalchemy>=2.0,<3
+alembic>=1.13,<2
+pandas>=2.1
+pyarrow>=15
+
+# ── DuckDB (analytics read replica) ───────────────────────────────────────────
+duckdb>=0.10.0             # 0.10.x exists; also compatible with 1.x
+
+# ── Agent / LLM (Google ADK) ──────────────────────────────────────────────────
+google-adk>=0.3.0          # Use floor; exact 0.5.* may not be released yet
+google-genai>=0.7.0
+chromadb>=0.4.0            # Vector store for RAG context
+
+# ── Pitch Deck ────────────────────────────────────────────────────────────────
+jinja2>=3.1,<4
+weasyprint>=62,<64
+
+# ── Scheduler ─────────────────────────────────────────────────────────────────
+apscheduler>=3.10,<4
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+plyer>=2.1
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+streamlit>=1.35
+
+# ── Dev / Testing ─────────────────────────────────────────────────────────────
+pytest>=8
+pytest-asyncio>=0.23

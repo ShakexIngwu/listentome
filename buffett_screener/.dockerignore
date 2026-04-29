@@ -1,0 +1,32 @@
+# Git / IDE
+.git
+.gitignore
+.vscode
+.idea
+*.md
+
+# Docker stubs at project root (real files are in docker/)
+Dockerfile
+docker-compose.yml
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+*.egg-info
+.pytest_cache
+.mypy_cache
+
+# Secrets
+.env
+
+# Generated at runtime — Docker volumes handle these
+analytics/
+output/
+backups/
+logs/
+
+# macOS
+.DS_Store

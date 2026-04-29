@@ -1,0 +1,167 @@
+# =============================================================================
+# docker/docker-compose.yml — Warren Buffett Stock Screener
+#
+# Services
+# ────────
+#   postgres   Storage layer — PostgreSQL 16 (ACID operational store)
+#   backend    Logic layer   — APScheduler pipeline (ingestion + analysis + earnings)
+#   dashboard  UI layer      — Streamlit dashboard (read-only, port 8501 exposed)
+#
+# Volumes
+# ───────
+#   pgdata     PostgreSQL data files       (postgres only)
+#   analytics  DuckDB .duckdb + parquet/   (backend writes, dashboard reads)
+#   output     Pitch deck PDFs             (backend writes, dashboard reads)
+#   backups    Daily pg_dump archives      (backend only)
+#
+# Usage (run from project root OR with -f flag)
+# ─────────────────────────────────────────────
+#   docker compose -f docker/docker-compose.yml up -d --build
+#   docker compose -f docker/docker-compose.yml logs -f backend
+#   docker compose -f docker/docker-compose.yml exec backend python main.py --run-now
+#   docker compose -f docker/docker-compose.yml down -v
+# =============================================================================
+
+services:
+
+  # ── Storage layer ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: buffett_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       stocks
+      POSTGRES_USER:     buffett
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-buffett}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Exposes Postgres to your host machine so SQL clients can connect.
+      # Change PG_HOST_PORT in .env if 5432 is already taken on your Mac.
+      - "${PG_HOST_PORT:-5432}:5432"
+    networks:
+      - buffett-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buffett -d stocks"]
+      interval: 10s
+      timeout:  5s
+      retries:  10
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  # ── Backend / Logic layer ────────────────────────────────────────────────────
+  backend:
+    build:
+      # Build context is project root so all source files are available
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: runtime
+    image: buffett-screener:latest
+    container_name: buffett_backend
+    restart: unless-stopped
+    env_file:
+      # Load .env from project root for local overrides
+      - ../.env
+    environment:
+      # Override POSTGRES_URL so the host points to the Docker service name
+      # GOOGLE_API_KEY and GEMINI_MODEL are loaded from .env via env_file
+      # Only override things that MUST change for Docker (like hostnames)
+      POSTGRES_URL:        postgresql+asyncpg://buffett:${POSTGRES_PASSWORD:-buffett}@postgres:5432/stocks
+      DUCKDB_PATH:         /app/analytics/stocks_analytics.duckdb
+      PARQUET_DIR:         /app/analytics/parquet
+      POSTGRES_BACKUP_DIR: /app/backups
+      LOG_FORMAT:          json
+      LOG_LEVEL:           ${LOG_LEVEL:-INFO}
+      WAIT_FOR_POSTGRES:   "true"
+      RUN_MIGRATIONS:      "true"
+    command: ["python", "main.py"]
+    volumes:
+      - analytics:/app/analytics
+      - output:/app/output
+      - backups:/app/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - buffett-net
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 6G
+
+  # ── UI layer ─────────────────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: runtime
+    image: buffett-screener:latest        # Same image as backend — Docker builds once, reuses cache
+    container_name: buffett_dashboard
+    restart: unless-stopped
+    environment:
+      DUCKDB_PATH:       /app/analytics/stocks_analytics.duckdb
+      LOG_FORMAT:        console
+      LOG_LEVEL:         ${LOG_LEVEL:-INFO}
+      # Dashboard is read-only — skip postgres wait and migrations
+      WAIT_FOR_POSTGRES: "false"
+      RUN_MIGRATIONS:    "false"
+    command:
+      - streamlit
+      - run
+      - dashboard.py
+      - "--server.port=8501"
+      - "--server.address=0.0.0.0"
+      - "--server.headless=true"
+      - "--browser.gatherUsageStats=false"
+    volumes:
+      - analytics:/app/analytics:ro   # read-only — dashboard never writes
+      - output:/app/output:ro
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    depends_on:
+      - backend
+    networks:
+      - buffett-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout:  10s
+      retries:  5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+# ── Named volumes ─────────────────────────────────────────────────────────────
+volumes:
+  pgdata:
+    driver: local
+    labels:
+      com.buffett.description: "PostgreSQL 16 data files — primary source of truth"
+  analytics:
+    driver: local
+    labels:
+      com.buffett.description: "DuckDB analytics replica + Parquet exports"
+  output:
+    driver: local
+    labels:
+      com.buffett.description: "Generated pitch deck PDFs and HTML files"
+  backups:
+    driver: local
+    labels:
+      com.buffett.description: "Daily pg_dump compressed archives (30-day rotation)"
+
+# ── Internal network ──────────────────────────────────────────────────────────
+networks:
+  buffett-net:
+    driver: bridge
+    labels:
+      com.buffett.description: "Internal service mesh — only dashboard:8501 is exposed to host"
