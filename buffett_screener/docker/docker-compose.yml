@@ -95,41 +95,38 @@ services:
           cpus: "4.0"
           memory: 6G
 
-  # ── UI layer ─────────────────────────────────────────────────────────────────
-  dashboard:
+  # ── API layer ────────────────────────────────────────────────────────────────
+  api:
     build:
       context: ..
       dockerfile: docker/Dockerfile
       target: runtime
-    image: buffett-screener:latest        # Same image as backend — Docker builds once, reuses cache
-    container_name: buffett_dashboard
+    image: buffett-screener:latest
+    container_name: buffett_api
     restart: unless-stopped
     environment:
       DUCKDB_PATH:       /app/analytics/stocks_analytics.duckdb
       LOG_FORMAT:        console
       LOG_LEVEL:         ${LOG_LEVEL:-INFO}
-      # Dashboard is read-only — skip postgres wait and migrations
+      # API is read-only — skip postgres wait and migrations
       WAIT_FOR_POSTGRES: "false"
       RUN_MIGRATIONS:    "false"
     command:
-      - streamlit
-      - run
-      - dashboard.py
-      - "--server.port=8501"
-      - "--server.address=0.0.0.0"
-      - "--server.headless=true"
-      - "--browser.gatherUsageStats=false"
+      - uvicorn
+      - api:app
+      - "--host=0.0.0.0"
+      - "--port=8000"
     volumes:
-      - analytics:/app/analytics:ro   # read-only — dashboard never writes
+      - analytics:/app/analytics:ro   # read-only — API never writes
       - output:/app/output:ro
     ports:
-      - "${DASHBOARD_PORT:-8501}:8501"
+      - "${API_PORT:-8000}:8000"
     depends_on:
       - backend
     networks:
       - buffett-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout:  10s
       retries:  5
@@ -139,6 +136,20 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
+
+  # ── Frontend layer (Flutter Web) ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: buffett_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - api
+    networks:
+      - buffett-net
 
 # ── Named volumes ─────────────────────────────────────────────────────────────
 volumes:

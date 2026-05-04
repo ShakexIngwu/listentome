@@ -31,6 +31,12 @@ logs:           ## Tail logs for all services
 logs-backend:   ## Tail backend logs only
 	$(COMPOSE) logs -f backend
 
+logs-api:       ## Tail API logs only
+	$(COMPOSE) logs -f api
+
+logs-frontend:  ## Tail frontend logs only
+	$(COMPOSE) logs -f frontend
+
 ps:             ## Show container status
 	$(COMPOSE) ps
 
