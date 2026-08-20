@@ -1,0 +1,16 @@
+FROM ghcr.io/cirruslabs/flutter:stable AS builder
+
+WORKDIR /app
+COPY frontend/ .
+RUN flutter clean
+RUN flutter pub get
+RUN flutter build web
+
+FROM nginx:alpine
+# Copy the compiled web app
+COPY --from=builder /app/build/web /usr/share/nginx/html
+
+# Expose port 80
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

@@ -26,10 +26,19 @@ class Settings(BaseSettings):
     rate_limit_rps: float = 3.0
     yfinance_retry_attempts: int = 3
 
+    daily_concurrency: int = 2
+    daily_rate_limit_rps: float = 0.75
+    weekly_concurrency: int = 2
+    weekly_rate_limit_rps: float = 0.5
+
     # ── Google ADK / Gemini ───────────────────────────────────────────────────
-    google_api_key: str = ""              # Set via GOOGLE_API_KEY env var
-    # Default is gemini-1.5-flash for safety; overridden by env var GEMINI_MODEL
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_api_key: str = ""              # Set via GEMINI_API_KEY env var
+    # Default is gemini-3.5-flash for safety; overridden by env var GEMINI_MODEL
+    gemini_model: str = "gemini-3.5-flash"
+
+    @property
+    def api_key(self) -> str:
+        return self.gemini_api_key
 
     # ── Analysis Options ──────────────────────────────────────────────────────
     # If True, bypasses the QuantScreener filtering rules and analyzes ALL companies.

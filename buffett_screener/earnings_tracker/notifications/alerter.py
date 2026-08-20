@@ -9,7 +9,7 @@ log = structlog.get_logger()
 
 
 def _notify(title: str, message: str, app_icon: str = "") -> None:
-    """Sends a desktop notification. Silent fail if plyer is unavailable."""
+    """Sends a desktop notification. Gracefully falls back to console logs in headless/Docker environments."""
     try:
         from plyer import notification
         notification.notify(
@@ -18,6 +18,14 @@ def _notify(title: str, message: str, app_icon: str = "") -> None:
             app_name="Buffett Screener",
             app_icon=app_icon or "",
             timeout=10,
+        )
+    except (FileNotFoundError, OSError) as e:
+        # Expected in containerized/headless environments (e.g. no gdbus/notify-send)
+        log.info(
+            "notification_skipped_headless",
+            title=title,
+            message=message,
+            reason="Running inside headless Docker container; skipped desktop GUI popup."
         )
     except Exception as e:
         log.warning("notification_failed", error=str(e))
@@ -65,3 +73,36 @@ def alert_pipeline_failure(pipeline_name: str, error: str) -> None:
         message=error[:200],
     )
     log.error("alert_sent", type="pipeline_failure", pipeline=pipeline_name, error=error)
+
+
+def alert_upcoming_earnings(upcoming: list[dict]) -> None:
+    """Alert about upcoming earnings events in the next week."""
+    if not upcoming:
+        return
+    lines = []
+    for item in upcoming[:5]:  # show top 5
+        ticker = item["ticker"]
+        name = item.get("company_name") or ticker
+        date_str = str(item["earnings_date"])
+        est = item.get("eps_estimate")
+        est_str = f" (Est: ${est:.2f})" if est is not None else ""
+        lines.append(f"• {ticker}: {date_str}{est_str}")
+    
+    message = "\n".join(lines)
+    if len(upcoming) > 5:
+        message += f"\n...and {len(upcoming) - 5} more tickers."
+        
+    _notify(
+        title=f"📅 {len(upcoming)} Upcoming Earnings (Next 7 Days)",
+        message=message,
+    )
+    log.info("alert_sent", type="upcoming_earnings", count=len(upcoming))
+
+
+def alert_earnings_summary(summary_text: str) -> None:
+    """Alert with a summary of recent earnings events."""
+    _notify(
+        title="📊 Daily Earnings Summary (5:00 PM)",
+        message=summary_text,
+    )
+    log.info("alert_sent", type="earnings_summary")

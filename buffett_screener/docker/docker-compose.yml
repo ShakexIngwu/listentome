@@ -5,13 +5,14 @@
 # ────────
 #   postgres   Storage layer — PostgreSQL 16 (ACID operational store)
 #   backend    Logic layer   — APScheduler pipeline (ingestion + analysis + earnings)
-#   dashboard  UI layer      — Streamlit dashboard (read-only, port 8501 exposed)
+#   api        API service   — FastAPI backend service (internal, port 8000 exposed)
+#   frontend   UI layer      — Flutter Web UI dashboard (port 8080 exposed)
 #
 # Volumes
 # ───────
 #   pgdata     PostgreSQL data files       (postgres only)
-#   analytics  DuckDB .duckdb + parquet/   (backend writes, dashboard reads)
-#   output     Pitch deck PDFs             (backend writes, dashboard reads)
+#   analytics  DuckDB .duckdb + parquet/   (backend writes, frontend/API reads)
+#   output     Pitch deck PDFs             (backend writes, frontend/API reads)
 #   backups    Daily pg_dump archives      (backend only)
 #
 # Usage (run from project root OR with -f flag)
@@ -69,9 +70,9 @@ services:
       - ../.env
     environment:
       # Override POSTGRES_URL so the host points to the Docker service name
-      # GOOGLE_API_KEY and GEMINI_MODEL are loaded from .env via env_file
+      # GEMINI_API_KEY and GEMINI_MODEL are loaded from .env via env_file
       # Only override things that MUST change for Docker (like hostnames)
-      POSTGRES_URL:        postgresql+asyncpg://buffett:${POSTGRES_PASSWORD:-buffett}@postgres:5432/stocks
+      POSTGRES_URL:        postgresql+asyncpg://buffett:${POSTGRES_PASSWORD:-buffett}@buffett_postgres:5432/stocks
       DUCKDB_PATH:         /app/analytics/stocks_analytics.duckdb
       PARQUET_DIR:         /app/analytics/parquet
       POSTGRES_BACKUP_DIR: /app/backups
@@ -79,6 +80,7 @@ services:
       LOG_LEVEL:           ${LOG_LEVEL:-INFO}
       WAIT_FOR_POSTGRES:   "true"
       RUN_MIGRATIONS:      "true"
+      GEMINI_API_KEY:      ${GEMINI_API_KEY}
     command: ["python", "main.py"]
     volumes:
       - analytics:/app/analytics
@@ -95,41 +97,38 @@ services:
           cpus: "4.0"
           memory: 6G
 
-  # ── UI layer ─────────────────────────────────────────────────────────────────
-  dashboard:
+  # ── API layer ────────────────────────────────────────────────────────────────
+  api:
     build:
       context: ..
       dockerfile: docker/Dockerfile
       target: runtime
-    image: buffett-screener:latest        # Same image as backend — Docker builds once, reuses cache
-    container_name: buffett_dashboard
+    image: buffett-screener:latest
+    container_name: buffett_api
     restart: unless-stopped
     environment:
       DUCKDB_PATH:       /app/analytics/stocks_analytics.duckdb
       LOG_FORMAT:        console
       LOG_LEVEL:         ${LOG_LEVEL:-INFO}
-      # Dashboard is read-only — skip postgres wait and migrations
+      # API is read-only — skip postgres wait and migrations
       WAIT_FOR_POSTGRES: "false"
       RUN_MIGRATIONS:    "false"
     command:
-      - streamlit
-      - run
-      - dashboard.py
-      - "--server.port=8501"
-      - "--server.address=0.0.0.0"
-      - "--server.headless=true"
-      - "--browser.gatherUsageStats=false"
+      - uvicorn
+      - api:app
+      - "--host=0.0.0.0"
+      - "--port=8000"
     volumes:
-      - analytics:/app/analytics:ro   # read-only — dashboard never writes
+      - analytics:/app/analytics:ro   # read-only — API never writes
       - output:/app/output:ro
     ports:
-      - "${DASHBOARD_PORT:-8501}:8501"
+      - "${API_PORT:-8000}:8000"
     depends_on:
       - backend
     networks:
       - buffett-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout:  10s
       retries:  5
@@ -139,6 +138,20 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
+
+  # ── Frontend layer (Flutter Web) ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: buffett_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - api
+    networks:
+      - buffett-net
 
 # ── Named volumes ─────────────────────────────────────────────────────────────
 volumes:
@@ -164,4 +177,4 @@ networks:
   buffett-net:
     driver: bridge
     labels:
-      com.buffett.description: "Internal service mesh — only dashboard:8501 is exposed to host"
+      com.buffett.description: "Internal service mesh — frontend and api ports exposed to host"

@@ -14,6 +14,20 @@ from config import settings
 log = structlog.get_logger()
 
 
+import math
+
+def _clean_float(val) -> float | None:
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        if math.isinf(f) or math.isnan(f):
+            return None
+        return f
+    except (ValueError, TypeError):
+        return None
+
+
 @retry(
     stop=stop_after_attempt(settings.yfinance_retry_attempts),
     wait=wait_exponential(multiplier=1, min=2, max=30),
@@ -38,33 +52,45 @@ async def fetch_ticker_info(ticker: str) -> dict:
     if not info or info.get("quoteType") is None:
         raise ValueError(f"Empty or invalid yfinance response for {ticker}")
 
-    return {
+    # Fetch calendar details (upcoming earnings date, estimates)
+    try:
+        calendar_data = await loop.run_in_executor(None, lambda: stock.calendar)
+    except Exception as e:
+        log.warning("calendar_fetch_failed", ticker=ticker, error=str(e))
+        calendar_data = None
+
+    result = {
         "ticker":             ticker,
-        "market_cap":         info.get("marketCap"),
-        "enterprise_value":   info.get("enterpriseValue"),
-        "pe_ratio":           info.get("trailingPE"),
-        "forward_pe":         info.get("forwardPE"),
-        "price_to_book":      info.get("priceToBook"),
-        "price_to_sales":     info.get("priceToSalesTrailing12Months"),
-        "ev_to_ebitda":       info.get("enterpriseToEbitda"),
-        "eps_ttm":            info.get("trailingEps"),
-        "eps_growth_5y":      info.get("earningsGrowth"),
-        "eps_growth_1y":      info.get("earningsQuarterlyGrowth"),
-        "revenue_ttm":        info.get("totalRevenue"),
-        "gross_margin":       info.get("grossMargins"),
-        "operating_margin":   info.get("operatingMargins"),
-        "net_margin":         info.get("profitMargins"),
-        "total_debt":         info.get("totalDebt"),
-        "debt_to_equity":     info.get("debtToEquity"),
-        "current_ratio":      info.get("currentRatio"),
-        "free_cash_flow":     info.get("freeCashflow"),
-        "return_on_equity":   info.get("returnOnEquity"),
-        "return_on_assets":   info.get("returnOnAssets"),
-        "current_price":      info.get("currentPrice") or info.get("regularMarketPrice"),
-        "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
-        "fifty_two_week_low":  info.get("fiftyTwoWeekLow"),
+        "market_cap":         _clean_float(info.get("marketCap")),
+        "enterprise_value":   _clean_float(info.get("enterpriseValue")),
+        "pe_ratio":           _clean_float(info.get("trailingPE")),
+        "forward_pe":         _clean_float(info.get("forwardPE")),
+        "price_to_book":      _clean_float(info.get("priceToBook")),
+        "price_to_sales":     _clean_float(info.get("priceToSalesTrailing12Months")),
+        "ev_to_ebitda":       _clean_float(info.get("enterpriseToEbitda")),
+        "eps_ttm":            _clean_float(info.get("trailingEps")),
+        "eps_growth_5y":      _clean_float(info.get("earningsGrowth")),
+        "eps_growth_1y":      _clean_float(info.get("earningsQuarterlyGrowth")),
+        "revenue_ttm":        _clean_float(info.get("totalRevenue")),
+        "gross_margin":       _clean_float(info.get("grossMargins")),
+        "operating_margin":   _clean_float(info.get("operatingMargins")),
+        "net_margin":         _clean_float(info.get("profitMargins")),
+        "total_debt":         _clean_float(info.get("totalDebt")),
+        "debt_to_equity":     _clean_float(info.get("debtToEquity")),
+        "current_ratio":      _clean_float(info.get("currentRatio")),
+        "free_cash_flow":     _clean_float(info.get("freeCashflow")),
+        "return_on_equity":   _clean_float(info.get("returnOnEquity")),
+        "return_on_assets":   _clean_float(info.get("returnOnAssets")),
+        "current_price":      _clean_float(info.get("currentPrice") or info.get("regularMarketPrice")),
+        "fifty_two_week_high": _clean_float(info.get("fiftyTwoWeekHigh")),
+        "fifty_two_week_low":  _clean_float(info.get("fiftyTwoWeekLow")),
         "data_source":        "yfinance",
     }
+
+    if calendar_data:
+        result["_calendar"] = calendar_data
+
+    return result
 
 
 async def fetch_eps_history(ticker: str) -> list[dict]:

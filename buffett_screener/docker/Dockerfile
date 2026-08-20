@@ -24,7 +24,7 @@ RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 FROM python:3.11-slim AS runtime
 
 LABEL maintainer="Buffett Screener"
-LABEL description="Warren Buffett Stock Screener — backend pipeline + Streamlit dashboard"
+LABEL description="Warren Buffett Stock Screener — backend pipeline + FastAPI service"
 
 # ── System libs ──────────────────────────────────────────────────────────────
 # WeasyPrint (PDF rendering) needs Cairo, Pango, GDK-PixBuf at runtime.
@@ -67,7 +67,7 @@ RUN chmod +x /entrypoint.sh
 
 USER buffett
 
-EXPOSE 8501
+EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]
 # Default CMD — overridden per-service in docker-compose.yml
