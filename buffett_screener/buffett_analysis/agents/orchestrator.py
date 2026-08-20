@@ -557,8 +557,9 @@ def _build_pipeline_agent() -> SequentialAgent:
     Constructs the ADK SequentialAgent that wires all six pipeline stages
     in order. ADK runs them one after another, passing session context forward.
     """
-    if settings.google_api_key:
-        os.environ.setdefault("GOOGLE_API_KEY", settings.google_api_key)
+    active_key = settings.api_key
+    if active_key:
+        os.environ["GEMINI_API_KEY"] = active_key
 
     return SequentialAgent(
         name="buffett_pipeline",

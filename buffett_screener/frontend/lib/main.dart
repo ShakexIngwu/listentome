@@ -84,8 +84,8 @@ class _MainNavigationLayoutState extends State<MainNavigationLayout> {
             label: 'Sunday Read',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.notifications),
-            label: 'Daily Pulse',
+            icon: Icon(Icons.campaign),
+            label: 'Earnings',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.analytics),

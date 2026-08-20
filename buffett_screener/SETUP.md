@@ -11,9 +11,9 @@ cd /Users/kesha/Documents/listentome/buffett_screener
 cp .env.example .env
 ```
 
-Your `.env` already has `GOOGLE_API_KEY` set. Just confirm these two lines:
+Your `.env` already has `GEMINI_API_KEY` set. Just confirm these two lines:
 ```env
-GOOGLE_API_KEY=your_google_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 POSTGRES_PASSWORD=buffett   # change to something strong in production
 ```
 
@@ -23,13 +23,14 @@ POSTGRES_PASSWORD=buffett   # change to something strong in production
 docker compose up -d --build
 ```
 
-This starts **3 containers**:
+This starts **4 containers**:
 
 | Container | Role | Exposes |
 |-----------|------|---------|
 | `buffett_postgres` | PostgreSQL 16 — primary data store | internal only |
 | `buffett_backend` | Pipeline scheduler (weekly + daily) | internal only |
-| `buffett_dashboard` | Streamlit UI | **localhost:8501** |
+| `buffett_api` | FastAPI backend service | **localhost:8000** |
+| `buffett_frontend` | Flutter Web UI dashboard | **localhost:8080** |
 
 On first boot the backend will:
 1. Wait for PostgreSQL to be healthy
@@ -39,7 +40,7 @@ On first boot the backend will:
 ### 3. Open the dashboard
 
 ```
-http://localhost:8501
+http://localhost:8080
 ```
 
 > The dashboard will show empty data until the first pipeline run completes.
@@ -109,12 +110,14 @@ Host Machine
     │     Volume: output   → /app/output      (pitch deck PDFs)
     │     Volume: backups  → /app/backups     (daily pg_dump)
     │
-    └── dashboard (buffett-screener:latest)
-          UI layer — Streamlit
-          Reads: analytics volume ONLY (DuckDB, read-only mount)
-          Volume: analytics → /app/analytics  (read-only)
-          Volume: output   → /app/output      (read-only)
-          Port:   8501 → host:8501 ← only exposed port
+        ├── api (buffett-screener:latest)
+    │     API service — FastAPI
+    │     Reads: analytics/output volumes (read-only)
+    │     Port: 8000 → host:8000
+    │
+    └── frontend (nginx/flutter web)
+          UI layer — Flutter Web
+          Port: 8080 → host:8080 (talks to api:8000)
 ```
 
 ---
@@ -151,5 +154,12 @@ alembic upgrade head
 # 4. Run
 python main.py --run-now    # one-shot pipeline
 python main.py              # daemon (scheduled)
-streamlit run dashboard.py  # UI at localhost:8501
+
+# 5. Run API & Frontend
+uvicorn api:app --reload    # API service at localhost:8000
+
+# To run the Flutter frontend in local development, ensure Flutter is installed:
+cd frontend
+flutter pub get
+flutter run -d chrome       # UI runs in browser, proxies to API
 ```

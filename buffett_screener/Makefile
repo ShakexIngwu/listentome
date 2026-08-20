@@ -8,7 +8,7 @@
 COMPOSE := docker compose -f docker/docker-compose.yml --env-file .env
 
 .PHONY: build up down restart logs logs-backend ps \
-        run-stock-pull run-stock-pull-bg run-earnings-update run-analysis export-duckdb backup \
+        run-stock-pull run-stock-pull-bg run-earnings-update run-daily-analysis run-notify-coming run-summarize-recent run-analysis export-duckdb backup \
         shell-backend shell-db clean
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -42,14 +42,23 @@ ps:             ## Show container status
 
 # ── Pipeline triggers ─────────────────────────────────────────────────────────
 
-run-stock-pull:      ## NASDAQ ingestion + full Buffett analysis (foreground, 20-60 min)
-	$(COMPOSE) exec backend python main.py --run-now
+run-stock-pull:      ## NASDAQ weekly ingestion + analysis. Usage: make run-stock-pull [TICKERS=AAPL,MSFT] [LIMIT=10]
+	$(COMPOSE) exec backend python main.py --run-now $(if $(TICKERS),--tickers $(TICKERS),) $(if $(LIMIT),--limit $(LIMIT),)
 
-run-stock-pull-bg:   ## Same as run-stock-pull but runs in background (use make logs-backend to watch)
-	$(COMPOSE) exec -d backend python main.py --run-now
+run-stock-pull-bg:   ## Same as run-stock-pull but runs in background
+	$(COMPOSE) exec -d backend python main.py --run-now $(if $(TICKERS),--tickers $(TICKERS),) $(if $(LIMIT),--limit $(LIMIT),)
 
 run-earnings-update: ## Daily earnings tracker (EDGAR 8-K RSS poll + re-analysis)
 	$(COMPOSE) exec backend python main.py --run-daily
+
+run-daily-analysis:  ## Daily full analysis + Buffett score updates. Usage: make run-daily-analysis [TICKERS=AAPL,MSFT] [LIMIT=10]
+	$(COMPOSE) exec backend python main.py --run-daily-analysis $(if $(TICKERS),--tickers $(TICKERS),) $(if $(LIMIT),--limit $(LIMIT),)
+
+run-notify-coming:   ## Upcoming earnings calendar alerts (next 7 days)
+	$(COMPOSE) exec backend python main.py --run-notify-coming
+
+run-summarize-recent: ## Daily recent earnings outcomes summary (last 24 hours)
+	$(COMPOSE) exec backend python main.py --run-summarize-recent
 
 run-analysis:   ## Buffett analysis only — skip ingestion, use existing DB data
 	$(COMPOSE) exec backend python main.py --run-analysis

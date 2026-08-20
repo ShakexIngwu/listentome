@@ -1,308 +1,467 @@
-import 'package:flutter/material.dart';
 import 'dart:math';
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../portfolio_service.dart';
 import '../api_service.dart';
 
-enum WeatherState { sunny, cloudy, stormy }
-
 class HomeDashboardScreen extends StatefulWidget {
   final Function(String) onTickerTap;
-
   const HomeDashboardScreen({super.key, required this.onTickerTap});
 
   @override
   State<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
 }
 
-class _HomeDashboardScreenState extends State<HomeDashboardScreen> with SingleTickerProviderStateMixin {
+class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerProviderStateMixin {
+  late PortfolioService _portfolioService;
   final ApiService _apiService = ApiService();
-  PortfolioService? _portfolioService;
+  
   List<PortfolioItem> _portfolio = [];
+  Map<String, double> _currentPrices = {};
   bool _isLoading = true;
-  double _portfolioChangePct = 0.0;
-  double _totalValue = 0.0;
 
-  late AnimationController _weatherAnimController;
+  late AnimationController _waterAnimController;
+
+  final List<Offset> _slotPositions = [
+    const Offset(0.3, 0.35),
+    const Offset(0.5, 0.25),
+    const Offset(0.7, 0.35),
+    const Offset(0.2, 0.5),
+    const Offset(0.4, 0.4),
+    const Offset(0.6, 0.4),
+    const Offset(0.8, 0.5),
+    const Offset(0.3, 0.65),
+    const Offset(0.5, 0.55),
+    const Offset(0.7, 0.65),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _weatherAnimController = AnimationController(
+    _waterAnimController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 10),
+      duration: const Duration(seconds: 4),
     )..repeat();
+    _initData();
+  }
 
-    _loadPortfolio();
+  Future<void> _initData() async {
+    _portfolioService = await PortfolioService.init();
+    _portfolio = _portfolioService.getPortfolio();
+    
+    for (var item in _portfolio) {
+      try {
+        final detail = await _apiService.getTickerDeepDive(item.ticker);
+        final price = detail.company['price']?.toDouble() ?? item.addedPrice;
+        _currentPrices[item.ticker] = price;
+      } catch (e) {
+        _currentPrices[item.ticker] = item.addedPrice;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   void dispose() {
-    _weatherAnimController.dispose();
+    _waterAnimController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadPortfolio() async {
-    final service = await PortfolioService.init();
-    final items = service.getPortfolio();
-
-    double totalCost = 0.0;
-    double currentValue = 0.0;
-
-    for (var item in items) {
-      try {
-        final detail = await _apiService.getTickerDeepDive(item.ticker);
-        final currentPrice = (detail.latestScore?['price'] ?? item.addedPrice).toDouble();
-        totalCost += item.addedPrice;
-        currentValue += currentPrice;
-      } catch (e) {
-        totalCost += item.addedPrice;
-        currentValue += item.addedPrice;
-      }
-    }
-
-    double pctChange = 0.0;
-    if (totalCost > 0) {
-      pctChange = ((currentValue - totalCost) / totalCost) * 100;
-    }
-
-    setState(() {
-      _portfolioService = service;
-      _portfolio = items;
-      _totalValue = currentValue;
-      _portfolioChangePct = pctChange;
-      _isLoading = false;
-    });
+  void _showTreeDetails(PortfolioItem item, double currentPrice, double gainPct) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final isGain = gainPct >= 0;
+        final color = isGain ? const Color(0xFF10B981) : const Color(0xFFF59E0B);
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.ticker,
+                    style: GoogleFonts.notoSerif(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1A1C1A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    item.companyName,
+                    style: GoogleFonts.manrope(
+                      fontSize: 16,
+                      color: const Color(0xFF4D4635),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildDetailMetric('Added Price', '\$${item.addedPrice.toStringAsFixed(2)}'),
+                      _buildDetailMetric('Current Value', '\$${currentPrice.toStringAsFixed(2)}'),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${isGain ? '+' : ''}${(gainPct * 100).toStringAsFixed(2)}%',
+                      style: GoogleFonts.manrope(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onTickerTap(item.ticker);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD4AF37),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                    child: Text('View Details', style: GoogleFonts.manrope(fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
-  WeatherState get _currentWeather {
-    if (_portfolio.isEmpty) return WeatherState.sunny; // Default
-    if (_portfolioChangePct >= 1.0) return WeatherState.sunny;
-    if (_portfolioChangePct <= -1.0) return WeatherState.stormy;
-    return WeatherState.cloudy;
+  Widget _buildDetailMetric(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.manrope(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF7F7663),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: GoogleFonts.manrope(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF1A1C1A),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+    }
+
+    double totalAdded = 0;
+    double totalCurrent = 0;
+    for (var item in _portfolio) {
+      totalAdded += item.addedPrice;
+      totalCurrent += _currentPrices[item.ticker] ?? item.addedPrice;
+    }
+    double overallGain = totalAdded > 0 ? (totalCurrent - totalAdded) / totalAdded : 0;
+    bool isOverallGain = overallGain >= 0;
+
     return Scaffold(
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-              children: [
-                // Background & Weather Scene
-                Positioned.fill(
-                  child: AnimatedBuilder(
-                    animation: _weatherAnimController,
-                    builder: (context, child) {
-                      return CustomPaint(
-                        painter: LandscapePainter(
-                          weather: _currentWeather,
-                          animationValue: _weatherAnimController.value,
+      backgroundColor: const Color(0xFFFAF9F6), // Warm paper neutral
+      body: Stack(
+        children: [
+          // Background Garden Image
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/portfolio_garden_bg.jpg',
+              fit: BoxFit.cover,
+            ),
+          ),
+
+          // Water & Bubble Animations Overlay
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _waterAnimController,
+              builder: (context, child) {
+                return CustomPaint(
+                  painter: WaterEffectsPainter(animationValue: _waterAnimController.value),
+                );
+              },
+            ),
+          ),
+
+          // Trees Overlay
+          Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Stack(
+                  fit: StackFit.expand,
+                  clipBehavior: Clip.none,
+                  children: List.generate(10, (index) {
+                    if (index >= _portfolio.length) {
+                      return const SizedBox.shrink(); // Empty slot
+                    }
+                    
+                    final item = _portfolio[index];
+                    final currentPrice = _currentPrices[item.ticker] ?? item.addedPrice;
+                    final gainPct = item.addedPrice > 0 ? (currentPrice - item.addedPrice) / item.addedPrice : 0.0;
+                    
+                    final pos = _slotPositions[index];
+                    final x = pos.dx * constraints.maxWidth;
+                    final y = pos.dy * constraints.maxHeight;
+
+                    return Positioned(
+                      left: x - 40,
+                      top: y - 80,
+                      child: GestureDetector(
+                        onTap: () => _showTreeDetails(item, currentPrice, gainPct),
+                        child: TreeWidget(gainPct: gainPct),
+                      ),
+                    );
+                  }),
+                );
+              }
+            ),
+          ),
+
+          // Top Glassmorphic Summary Card
+          Positioned(
+            top: 64,
+            left: 32,
+            right: 32,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white, width: 1.0),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Portfolio Harvest',
+                            style: GoogleFonts.notoSerif(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF1A1C1A),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '\$${totalCurrent.toStringAsFixed(2)}',
+                            style: GoogleFonts.manrope(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF735C00), // Primary
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: (isOverallGain ? const Color(0xFF10B981) : const Color(0xFFF59E0B)).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(999),
                         ),
-                      );
-                    },
+                        child: Text(
+                          '${isOverallGain ? '+' : ''}${(overallGain * 100).toStringAsFixed(2)}%',
+                          style: GoogleFonts.manrope(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isOverallGain ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                          ),
+                        ),
+                      )
+                    ],
                   ),
                 ),
-                // Overlay Content
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32.0),
+              ),
+            ),
+          ),
+
+          // Empty State Message
+          if (_portfolio.isEmpty)
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white, width: 1.0),
+                    ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildGreeting(),
-                        const Spacer(),
-                        _buildPortfolioSummaryCard(),
+                        const Icon(Icons.spa, size: 48, color: Color(0xFF735C00)),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Your garden is empty',
+                          style: GoogleFonts.notoSerif(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF1A1C1A),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Add stocks to your portfolio to plant trees.',
+                          style: GoogleFonts.manrope(
+                            fontSize: 16,
+                            color: const Color(0xFF4D4635),
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
-    );
-  }
-
-  Widget _buildGreeting() {
-    String greeting = "It's a beautiful day.";
-    if (_currentWeather == WeatherState.cloudy) {
-      greeting = "The winds of change are blowing.";
-    } else if (_currentWeather == WeatherState.stormy) {
-      greeting = "Storms pass. Roots grow deeper.";
-    }
-
-    if (_portfolio.isEmpty) {
-      greeting = "Plant your first seed. Explore the Sunday Read.";
-    }
-
-    return Text(
-      greeting,
-      style: const TextStyle(
-        fontSize: 32,
-        fontWeight: FontWeight.w300,
-        color: Colors.white,
-        shadows: [Shadow(blurRadius: 4, color: Colors.black45, offset: Offset(1, 1))],
-      ),
-    );
-  }
-
-  Widget _buildPortfolioSummaryCard() {
-    return Container(
-      width: 320,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Paper Portfolio",
-            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14, letterSpacing: 1.2),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _portfolio.isEmpty ? "Empty" : "\$${_totalValue.toStringAsFixed(2)}",
-            style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          if (_portfolio.isNotEmpty)
-            Row(
-              children: [
-                Icon(
-                  _portfolioChangePct >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                  color: _portfolioChangePct >= 0 ? Colors.greenAccent : Colors.redAccent,
-                  size: 16,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  "${_portfolioChangePct.abs().toStringAsFixed(2)}% total",
-                  style: TextStyle(
-                    color: _portfolioChangePct >= 0 ? Colors.greenAccent : Colors.redAccent,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () => widget.onTickerTap(''), // Let main nav handle deep dive or read
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white.withOpacity(0.1),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              minimumSize: const Size(double.infinity, 48),
-            ),
-            child: Text(_portfolio.isEmpty ? "Discover Companies" : "View Details"),
-          )
         ],
       ),
     );
   }
 }
 
-class LandscapePainter extends CustomPainter {
-  final WeatherState weather;
+class WaterEffectsPainter extends CustomPainter {
   final double animationValue;
 
-  LandscapePainter({required this.weather, required this.animationValue});
+  WaterEffectsPainter({required this.animationValue});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Sky Gradient
-    Color skyTop;
-    Color skyBottom;
-    if (weather == WeatherState.sunny) {
-      skyTop = const Color(0xFF4A90E2);
-      skyBottom = const Color(0xFF87CEFA);
-    } else if (weather == WeatherState.cloudy) {
-      skyTop = const Color(0xFF78909C);
-      skyBottom = const Color(0xFFB0BEC5);
-    } else {
-      skyTop = const Color(0xFF263238);
-      skyBottom = const Color(0xFF455A64);
-    }
-
-    final skyRect = Rect.fromLTWH(0, 0, size.width, size.height);
-    final skyPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [skyTop, skyBottom],
-      ).createShader(skyRect);
-    canvas.drawRect(skyRect, skyPaint);
-
-    // 2. Weather Effects (Clouds/Stars/Rain)
-    if (weather == WeatherState.sunny) {
-      _drawSun(canvas, size);
-    } else if (weather == WeatherState.stormy) {
-      _drawRain(canvas, size);
-    }
-
-    // 3. Ground/Hills
-    Color hillColor = weather == WeatherState.stormy ? const Color(0xFF3E2723) : const Color(0xFF558B2F);
-    if (weather == WeatherState.cloudy) hillColor = const Color(0xFF8D6E63);
-
-    final hillPaint = Paint()..color = hillColor;
-    final path = Path();
-    path.moveTo(0, size.height * 0.7);
-    path.quadraticBezierTo(size.width * 0.25, size.height * 0.65, size.width * 0.5, size.height * 0.75);
-    path.quadraticBezierTo(size.width * 0.75, size.height * 0.85, size.width, size.height * 0.7);
-    path.lineTo(size.width, size.height);
-    path.lineTo(0, size.height);
-    path.close();
-    canvas.drawPath(path, hillPaint);
-
-    // 4. The Tree
-    _drawTree(canvas, size);
-  }
-
-  void _drawSun(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.yellow.withOpacity(0.8)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
-    canvas.drawCircle(Offset(size.width * 0.8, size.height * 0.2), 60, paint);
-    canvas.drawCircle(Offset(size.width * 0.8, size.height * 0.2), 40, Paint()..color = Colors.yellow);
-  }
-
-  void _drawRain(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = Colors.white.withOpacity(0.4)
-      ..strokeWidth = 2;
-    final rand = Random(42); // Deterministic random for stationary lines, but animated offset
-    for (int i = 0; i < 100; i++) {
-      double x = rand.nextDouble() * size.width;
-      double y = (rand.nextDouble() * size.height + animationValue * size.height) % size.height;
-      canvas.drawLine(Offset(x, y), Offset(x - 5, y + 20), paint);
-    }
-  }
-
-  void _drawTree(Canvas canvas, Size size) {
-    // Trunk
-    final trunkPaint = Paint()..color = const Color(0xFF4E342E)..strokeWidth = 12..strokeCap = StrokeCap.round;
-    final trunkBottom = Offset(size.width * 0.3, size.height * 0.8);
-    final trunkTop = Offset(size.width * 0.3, size.height * 0.55);
-    canvas.drawLine(trunkBottom, trunkTop, trunkPaint);
-
-    // Leaves
-    if (weather != WeatherState.stormy) {
-      Color leafColor = weather == WeatherState.sunny ? const Color(0xFF2E7D32) : const Color(0xFFD84315); // Green or Autumn orange
-      final leafPaint = Paint()..color = leafColor.withOpacity(0.9);
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
       
-      canvas.drawCircle(Offset(size.width * 0.3, size.height * 0.55), 60, leafPaint);
-      canvas.drawCircle(Offset(size.width * 0.25, size.height * 0.6), 50, leafPaint);
-      canvas.drawCircle(Offset(size.width * 0.35, size.height * 0.6), 50, leafPaint);
-      canvas.drawCircle(Offset(size.width * 0.3, size.height * 0.48), 45, leafPaint);
+    final bubblePaint = Paint()
+      ..color = Colors.white.withOpacity(0.6)
+      ..style = PaintingStyle.fill;
+
+    int numRipples = 8;
+    for (int i = 0; i < numRipples; i++) {
+      double progress = (animationValue + (i / numRipples)) % 1.0;
+      double yOffset = size.height * 0.6 + (progress * size.height * 0.3);
+      double xOffset = size.width * 0.2 + (sin(progress * pi * 2) * size.width * 0.3) + (i * 20);
+      
+      double rippleWidth = 40.0 * sin(progress * pi); // fades in/out
+      paint.color = Colors.white.withOpacity(0.3 * sin(progress * pi));
+      canvas.drawLine(Offset(xOffset, yOffset), Offset(xOffset + rippleWidth, yOffset + (rippleWidth * 0.2)), paint);
+    }
+
+    final rand = Random(42); // stable seed for bubble positions
+    for (int i = 0; i < 20; i++) {
+      double baseX = size.width * 0.5 + (rand.nextDouble() - 0.5) * size.width * 0.8;
+      double baseY = size.height * 0.7 + rand.nextDouble() * size.height * 0.25;
+      
+      double bubbleProgress = (animationValue + rand.nextDouble()) % 1.0;
+      double currentY = baseY - (bubbleProgress * 100); // Rises by 100 pixels
+      double currentX = baseX + sin(bubbleProgress * pi * 4 + i) * 10; // Wiggles
+      
+      double radius = 2.0 + rand.nextDouble() * 3.0;
+      double opacity = sin(bubbleProgress * pi) * 0.6; // Fade in and out
+      
+      bubblePaint.color = Colors.white.withOpacity(opacity);
+      canvas.drawCircle(Offset(currentX, currentY), radius, bubblePaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant LandscapePainter oldDelegate) {
-    return oldDelegate.weather != weather || oldDelegate.animationValue != animationValue;
+  bool shouldRepaint(covariant WaterEffectsPainter oldDelegate) {
+    return oldDelegate.animationValue != animationValue;
+  }
+}
+
+class TreeWidget extends StatefulWidget {
+  final double gainPct;
+
+  const TreeWidget({super.key, required this.gainPct});
+
+  @override
+  State<TreeWidget> createState() => _TreeWidgetState();
+}
+
+class _TreeWidgetState extends State<TreeWidget> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _growAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _growAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _growAnimation,
+      builder: (context, child) {
+        double scale = 1.0 + (widget.gainPct * 2).clamp(-0.2, 0.5);
+        scale *= _growAnimation.value;
+        return Transform.scale(
+          scale: scale,
+          child: Image.asset(
+            'assets/images/glass_tree_transparent.png',
+            width: 80,
+            height: 100,
+            fit: BoxFit.contain,
+          ),
+        );
+      },
+    );
   }
 }

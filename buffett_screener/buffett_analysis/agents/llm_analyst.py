@@ -31,8 +31,9 @@ log = structlog.get_logger()
 def _build_analyst_agent(strategy: InvestmentStrategy) -> LlmAgent:
     """Builds the ADK LlmAgent using the given strategy's instruction and schema."""
     # Set Google API key for ADK runtime
-    if settings.google_api_key:
-        os.environ.setdefault("GOOGLE_API_KEY", settings.google_api_key)
+    active_key = settings.api_key
+    if active_key:
+        os.environ["GEMINI_API_KEY"] = active_key
 
     agent = LlmAgent(
         name="buffett_analyst",

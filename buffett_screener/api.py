@@ -5,6 +5,7 @@ Serves data from the DuckDB analytics read replica.
 import os
 from pathlib import Path
 from typing import List, Optional, Any, Dict
+import math
 
 import duckdb
 import pandas as pd
@@ -37,9 +38,16 @@ class TopPick(BaseModel):
     recommendation: str
     margin_of_safety: float
 
+def clean_value(val):
+    if isinstance(val, float):
+        if math.isnan(val) or math.isinf(val):
+            return None
+    return val
+
 def clean_df(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    # Convert DataFrame to a list of dicts, replacing NaN with None
-    return df.where(pd.notnull(df), None).to_dict(orient="records")
+    # Convert to standard Python dict records, then strictly replace any NaN/inf floats with None
+    records = df.to_dict(orient="records")
+    return [{k: clean_value(v) for k, v in r.items()} for r in records]
 
 @app.get("/api/top-picks", response_model=List[TopPick])
 def get_top_picks(limit: int = 50):

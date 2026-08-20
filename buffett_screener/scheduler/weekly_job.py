@@ -23,7 +23,10 @@ from streaming.worker import run_streaming_pipeline
 log = structlog.get_logger()
 
 
-async def weekly_ingestion_job() -> None:
+async def weekly_ingestion_job(
+    ticker_subset: set[str] | None = None,
+    limit: int | None = None,
+) -> None:
     """
     Full weekly pipeline:
     1. Start a pipeline_runs record in PostgreSQL
@@ -61,25 +64,24 @@ async def weekly_ingestion_job() -> None:
             newly_delisted=len(discovery.newly_delisted),
         )
 
-        # Stage 2: yfinance pull — ONLY for newly listed/delisted tickers
-        # Existing tickers already have fresh data from the previous run
-        if changed_tickers:
-            stats = await run_streaming_pipeline(
-                run_id=run_id,
-                ticker_subset=changed_tickers,
-            )
-        else:
-            log.info("no_ticker_changes_skip_pull", run_id=run_id)
-            stats = {"succeeded": 0, "failed": 0, "total": 0, "run_id": run_id}
+        # Stage 2: yfinance pull for all active tickers (gentle weekly rate to prevent 429 blocks)
+        resolved_subset = ticker_subset
+        if resolved_subset is None and limit is not None:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    text("SELECT ticker FROM companies WHERE is_active = TRUE ORDER BY ticker LIMIT :limit"),
+                    {"limit": limit}
+                )
+                resolved_subset = {row[0] for row in result.fetchall()}
 
-        # Stage 3: Buffett analysis on ALL active tickers (uses existing financial data)
-        log.info("buffett_analysis_starting", run_id=run_id)
-        from buffett_analysis.agents.orchestrator import run_buffett_analysis
-        analysis_result = await run_buffett_analysis()
-        log.info("buffett_analysis_complete", run_id=run_id, **analysis_result)
-
-        # Stage 4: export to DuckDB (includes fresh buffett_scores)
-        await run_full_export()
+        stats = await run_streaming_pipeline(
+            run_id=run_id,
+            ticker_subset=resolved_subset,
+            skip_eps_history=False,
+            concurrency=settings.weekly_concurrency,
+            rate_limit_rps=settings.weekly_rate_limit_rps,
+            force_refresh=False,
+        )
 
         # Mark completed
         async with AsyncSessionLocal() as session:
@@ -120,13 +122,18 @@ async def weekly_ingestion_job() -> None:
 
 
 def build_scheduler() -> AsyncIOScheduler:
-    """Builds and returns (but does not start) the APScheduler instance."""
-    scheduler = AsyncIOScheduler()
+    """Builds and returns (but does not start) the APScheduler instance in Pacific Time."""
+    scheduler = AsyncIOScheduler(timezone="America/Los_Angeles")
 
-    # Weekly ingestion: Sunday at 02:00 AM
+    # Weekly Ingestion: Sunday at 02:00 AM PT
     scheduler.add_job(
         weekly_ingestion_job,
-        trigger=CronTrigger(day_of_week=settings.weekly_run_day, hour=settings.weekly_run_hour, minute=0),
+        trigger=CronTrigger(
+            day_of_week=settings.weekly_run_day,
+            hour=settings.weekly_run_hour,
+            minute=0,
+            timezone=scheduler.timezone,
+        ),
         id="weekly_ingestion",
         name="NASDAQ Weekly Ingestion",
         replace_existing=True,
@@ -136,7 +143,11 @@ def build_scheduler() -> AsyncIOScheduler:
     # Daily backup: every day at 03:00 AM
     scheduler.add_job(
         daily_backup_job,
-        trigger=CronTrigger(hour=3, minute=0),
+        trigger=CronTrigger(
+            hour=3,
+            minute=0,
+            timezone=scheduler.timezone,
+        ),
         id="daily_backup",
         name="PostgreSQL Daily Backup",
         replace_existing=True,

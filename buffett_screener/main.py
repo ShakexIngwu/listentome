@@ -57,7 +57,7 @@ async def _run_daemon() -> None:
     weekly_scheduler.start()
     daily_scheduler.start()
 
-    log.info("schedulers_started", weekly="Sunday 02:00", daily="Mon-Fri 07:00 & 18:00 ET")
+    log.info("schedulers_started", weekly="Sunday 02:00 PT", daily="Mon-Fri 07:00 & 18:00 PT")
 
 
     try:
@@ -69,12 +69,12 @@ async def _run_daemon() -> None:
         daily_scheduler.shutdown(wait=False)
 
 
-async def _run_now() -> None:
+async def _run_now(ticker_subset: set[str] | None = None, limit: int | None = None) -> None:
     """Immediately triggers the full weekly ingestion pipeline."""
     from scheduler.weekly_job import weekly_ingestion_job
     log = structlog.get_logger()
     log.info("manual_run_started")
-    await weekly_ingestion_job()
+    await weekly_ingestion_job(ticker_subset=ticker_subset, limit=limit)
     log.info("manual_run_complete")
 
 
@@ -85,6 +85,33 @@ async def _run_daily() -> None:
     log.info("manual_daily_run_started")
     await daily_earnings_job()
     log.info("manual_daily_run_complete")
+
+
+async def _run_daily_analysis(ticker_subset: set[str] | None = None, limit: int | None = None) -> None:
+    """Immediately triggers the daily full analysis job."""
+    from earnings_tracker.scheduler.daily_job import daily_analysis_job
+    log = structlog.get_logger()
+    log.info("manual_daily_analysis_started")
+    await daily_analysis_job(ticker_subset=ticker_subset, limit=limit)
+    log.info("manual_daily_analysis_complete")
+
+
+async def _run_notify_coming() -> None:
+    """Immediately triggers the notify coming earnings job."""
+    from earnings_tracker.scheduler.daily_job import notify_coming_earnings_job
+    log = structlog.get_logger()
+    log.info("manual_notify_coming_started")
+    await notify_coming_earnings_job()
+    log.info("manual_notify_coming_complete")
+
+
+async def _run_summarize_recent() -> None:
+    """Immediately triggers the summarize recent earnings job."""
+    from earnings_tracker.scheduler.daily_job import summarize_recent_earnings_job
+    log = structlog.get_logger()
+    log.info("manual_summarize_recent_started")
+    await summarize_recent_earnings_job()
+    log.info("manual_summarize_recent_complete")
 
 
 async def _run_analysis() -> None:
@@ -121,18 +148,37 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Warren Buffett Stock Screener")
     parser.add_argument("--run-now",      action="store_true", help="Weekly ingestion + Buffett analysis")
     parser.add_argument("--run-daily",    action="store_true", help="Daily earnings tracker")
+    parser.add_argument("--run-daily-analysis", action="store_true", help="Daily full analysis (yfinance pull + Buffett analysis + DuckDB rebuild)")
+    parser.add_argument("--run-notify-coming", action="store_true", help="Upcoming earnings calendar alerts")
+    parser.add_argument("--run-summarize-recent", action="store_true", help="Daily recent earnings outcomes summary")
     parser.add_argument("--run-analysis", action="store_true", help="Buffett analysis only (no ingestion)")
     parser.add_argument("--all",          action="store_true", help="With --run-analysis, skip the quant screener and analyze ALL stocks")
     parser.add_argument("--strategy",     type=str, default=None, help="Investment strategy for LLM analysis (default: early_buffett)")
     parser.add_argument("--top-n",        type=int, default=None, help="Number of top candidates to send to LLM (default: 50)")
+    parser.add_argument("--tickers",      type=str, default=None, help="Comma-separated list of tickers to pull and analyze (e.g. AAPL,MSFT)")
+    parser.add_argument("--limit",        type=int, default=None, help="Limit the number of tickers to pull/analyze for fast testing")
     parser.add_argument("--export-duckdb", action="store_true", help="Rebuild DuckDB from Postgres")
     parser.add_argument("--backup",       action="store_true", help="Run pg_dump now")
     args = parser.parse_args()
 
+    ticker_subset = None
+    if args.tickers:
+        ticker_subset = {t.strip().upper() for t in args.tickers.split(",") if t.strip()}
+
+    limit = args.limit
+    if args.top_n and limit is None:
+        limit = args.top_n
+
     if args.run_now:
-        asyncio.run(_run_now())
+        asyncio.run(_run_now(ticker_subset=ticker_subset, limit=limit))
     elif args.run_daily:
         asyncio.run(_run_daily())
+    elif args.run_daily_analysis:
+        asyncio.run(_run_daily_analysis(ticker_subset=ticker_subset, limit=limit))
+    elif args.run_notify_coming:
+        asyncio.run(_run_notify_coming())
+    elif args.run_summarize_recent:
+        asyncio.run(_run_summarize_recent())
     elif args.run_analysis:
         if args.all:
             settings.skip_screener = True

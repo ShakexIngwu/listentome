@@ -5,13 +5,14 @@
 # ────────
 #   postgres   Storage layer — PostgreSQL 16 (ACID operational store)
 #   backend    Logic layer   — APScheduler pipeline (ingestion + analysis + earnings)
-#   dashboard  UI layer      — Streamlit dashboard (read-only, port 8501 exposed)
+#   api        API service   — FastAPI backend service (internal, port 8000 exposed)
+#   frontend   UI layer      — Flutter Web UI dashboard (port 8080 exposed)
 #
 # Volumes
 # ───────
 #   pgdata     PostgreSQL data files       (postgres only)
-#   analytics  DuckDB .duckdb + parquet/   (backend writes, dashboard reads)
-#   output     Pitch deck PDFs             (backend writes, dashboard reads)
+#   analytics  DuckDB .duckdb + parquet/   (backend writes, frontend/API reads)
+#   output     Pitch deck PDFs             (backend writes, frontend/API reads)
 #   backups    Daily pg_dump archives      (backend only)
 #
 # Usage (run from project root OR with -f flag)
@@ -69,9 +70,9 @@ services:
       - ../.env
     environment:
       # Override POSTGRES_URL so the host points to the Docker service name
-      # GOOGLE_API_KEY and GEMINI_MODEL are loaded from .env via env_file
+      # GEMINI_API_KEY and GEMINI_MODEL are loaded from .env via env_file
       # Only override things that MUST change for Docker (like hostnames)
-      POSTGRES_URL:        postgresql+asyncpg://buffett:${POSTGRES_PASSWORD:-buffett}@postgres:5432/stocks
+      POSTGRES_URL:        postgresql+asyncpg://buffett:${POSTGRES_PASSWORD:-buffett}@buffett_postgres:5432/stocks
       DUCKDB_PATH:         /app/analytics/stocks_analytics.duckdb
       PARQUET_DIR:         /app/analytics/parquet
       POSTGRES_BACKUP_DIR: /app/backups
@@ -79,6 +80,7 @@ services:
       LOG_LEVEL:           ${LOG_LEVEL:-INFO}
       WAIT_FOR_POSTGRES:   "true"
       RUN_MIGRATIONS:      "true"
+      GEMINI_API_KEY:      ${GEMINI_API_KEY}
     command: ["python", "main.py"]
     volumes:
       - analytics:/app/analytics
@@ -175,4 +177,4 @@ networks:
   buffett-net:
     driver: bridge
     labels:
-      com.buffett.description: "Internal service mesh — only dashboard:8501 is exposed to host"
+      com.buffett.description: "Internal service mesh — frontend and api ports exposed to host"
